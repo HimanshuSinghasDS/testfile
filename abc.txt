@@ -1,0 +1,175 @@
+import numpy as np
+from PIL import Image
+import matplotlib.pyplot as plt
+
+def svd(A):
+    Ata = np.dot(A.T,A)
+    eig_val, eig_vec = np.linalg.eig(Ata)
+    sort = np.argsort(eig_val)[::-1]
+    eig_val = eig_val[sort]
+    eig_vec = eig_vec[:,sort]
+    sig_val = np.sqrt(eig_val)
+
+    U = np.zeros((A.shape[0], A.shape[0]), dtype = float)
+    for i in range(len(sig_val)):
+        U[:,i] = np.dot(A, eig_vec[:, i]) / sig_val[i]
+
+    S = np.zeros((U.shape[0], eig_vec.shape[1]), dtype = float)
+    for i in range(len(sig_val)):
+        S[i,i ] = sig_val[i]
+
+    return U, S, eig_vec.T
+
+img = Image.open("anime.jpg").convert('L')
+imgmat = np.array(img, dtype = float)
+
+imgmat /= 255.0
+
+U, S, Vt = svd(imgmat)
+
+k = 50
+
+img_reco = np.dot(U[:,:k], np.dot(S[:k,:k], Vt[:k,:]))
+
+img_reco *= 255.0
+img_reco = np.clip(img_reco, 0, 255)
+img_reco = img_reco.astype(np.uint8)
+
+plt.figure(figsize=(12, 6))
+plt.subplot(1, 2, 1)
+plt.imshow(imgmat, cmap='gray')
+plt.title("Original Grayscale Image")
+plt.axis('off')
+
+plt.subplot(1, 2, 2)
+plt.imshow(img_reco, cmap='gray')
+plt.title(f"Reconstructed Image with k={k} Singular Values")
+plt.axis('off')
+
+plt.show()
+
+tot_var = np.sum(S**2)
+var_rat = []
+
+for i in range(5, 220, 20):
+    cap_var = np.sum(S[:i] ** 2)
+    rat = cap_var / tot_var
+    var_rat.append(rat)
+    
+
+plt.plot(range(5,220,20), var_rat, marker = 'o')
+plt.grid('True')
+plt.show()
+
+
+#######################################################################################################
+import numpy as np
+import matplotlib.pyplot as plt
+from PIL import Image
+
+# Step 1: Standardize the Data
+def standardize_data(X):
+    mean = np.mean(X, axis=0)
+    std = np.std(X, axis=0)
+    return (X - mean) / std
+
+# Step 2: Calculate the Covariance Matrix
+def covariance_matrix(X):
+    return np.cov(X, rowvar=False)
+
+# Step 3: Compute Eigenvalues and Eigenvectors
+def compute_eigenvalues_eigenvectors(cov_matrix):
+    eigenvalues, eigenvectors = np.linalg.eigh(cov_matrix)
+    return eigenvalues, eigenvectors
+
+# Step 4: Sort Eigenvalues and Eigenvectors
+def sort_eigenvalues_eigenvectors(eigenvalues, eigenvectors):
+    sorted_indices = np.argsort(eigenvalues)[::-1]
+    sorted_eigenvalues = eigenvalues[sorted_indices]
+    sorted_eigenvectors = eigenvectors[:, sorted_indices]
+    return sorted_eigenvalues, sorted_eigenvectors
+
+# Step 5: Project the Data
+def project_data(X, eigenvectors, num_components):
+    return X.dot(eigenvectors[:, :num_components])
+
+# Putting it all together
+def pca(X, num_components):
+    # Step 1
+    X_standardized = standardize_data(X)
+
+    # Step 2
+    cov_matrix = covariance_matrix(X_standardized)
+
+    # Step 3
+    eigenvalues, eigenvectors = compute_eigenvalues_eigenvectors(cov_matrix)
+
+    # Step 4
+    sorted_eigenvalues, sorted_eigenvectors = sort_eigenvalues_eigenvectors(eigenvalues, eigenvectors)
+
+    # Step 5
+    X_projected = project_data(X_standardized, sorted_eigenvectors, num_components)
+
+    return X_projected, sorted_eigenvalues, sorted_eigenvectors
+
+img = Image.open("anime.jpg").convert('L')
+imgmat = np.array(img, dtype = float)
+
+imgmat /= 255.0
+
+# Applying PCA
+num_components = 50
+X_reduced, eigenvalues, eigenvectors = pca(imgmat, num_components)
+
+explained_var = np.cumsum(eigenvalues) / np.sum(eigenvalues) 
+
+print(explained_var)
+
+n_components=np.argmax(explained_var >= 0.80)+1
+# taking those components that explain the variance greater than a threshold
+
+n_components
+
+plt.plot(range(0,220,1), explained_var)
+plt.grid('True')
+plt.show()
+
+########################################################################################################
+
+import numpy as np
+class LRgd:
+    def __init__(self, lr=0.01, ep=1000):
+        self.lr = lr  # Learning rate
+        self.ep = ep  # Number of epochs
+        self.wq = None  # Weights for the features
+        self.bs = None  # Bias term
+        self.loss = []  # To track loss over epochs
+
+    def fit(self, X, y):
+        sample_n, features_n = X.shape
+        self.wq = np.zeros(features_n)
+        self.bs = 0
+
+        for i in range(self.ep):
+            y_pred = np.dot(X, self.wq) + self.bs  # Prediction
+            dw = (1/sample_n) * np.dot(X.T, (y_pred - y))  # Gradient of weights
+            db = (1/sample_n) * np.sum(y_pred - y)  # Gradient of bias
+
+            # Update weights and bias
+            self.wq -= self.lr * dw
+            self.bs -= self.lr * db
+
+            # Calculate Mean Squared Error
+            mse = (1/sample_n) * np.sum((y - y_pred) ** 2)
+            self.loss.append(mse)
+
+    def predict(self, X):
+        return np.dot(X, self.wq) + self.bs
+
+    def mse(self, y_true, y_pred):
+        return np.mean((y_true - y_pred) ** 2)
+
+    def r2scr(self, y_true, y_pred):
+        ss_tot = np.sum((y_true - np.mean(y_true)) ** 2)
+        ss_res = np.sum((y_true - y_pred) ** 2)
+        return 1 - (ss_res / ss_tot)
